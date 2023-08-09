@@ -17,6 +17,7 @@
 #include <assert.h>
 
 #include <iostream>
+#include <fstream>
 
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
@@ -25,8 +26,9 @@
 #include "jwt_verify_lib/struct_utils.h"
 #include "openssl/bio.h"
 #include "openssl/bn.h"
-#include "openssl/curve25519.h"
+#include "common.h"
 #include "openssl/ecdsa.h"
+#include "openssl/err.h"
 #include "openssl/evp.h"
 #include "openssl/rsa.h"
 #include "openssl/sha.h"
@@ -97,18 +99,22 @@ class KeyGetter : public WithStatus {
   bssl::UniquePtr<RSA> createRsaFromJwk(const std::string& n,
                                         const std::string& e) {
     bssl::UniquePtr<RSA> rsa(RSA_new());
-    rsa->n = createBigNumFromBase64UrlString(n).release();
-    rsa->e = createBigNumFromBase64UrlString(e).release();
-    if (rsa->n == nullptr || rsa->e == nullptr) {
+    bssl::UniquePtr<BIGNUM> bn_n = createBigNumFromBase64UrlString(n);
+    bssl::UniquePtr<BIGNUM> bn_e = createBigNumFromBase64UrlString(e);
+
+    if (bn_n == nullptr || bn_e == nullptr) {
       // RSA public key field is missing or has parse error.
       updateStatus(Status::JwksRsaParseError);
       return nullptr;
     }
-    if (BN_cmp_word(rsa->e, 3) != 0 && BN_cmp_word(rsa->e, 65537) != 0) {
+
+    if (BN_cmp_word(bn_e.get(), 3) != 0 && BN_cmp_word(bn_e.get(), 65537) != 0) {
       // non-standard key; reject it early.
       updateStatus(Status::JwksRsaParseError);
       return nullptr;
     }
+
+    RSA_set0_key(rsa.get(), bn_n.release(), bn_e.release(), NULL);
     return rsa;
   }
 
@@ -469,7 +475,7 @@ void Jwks::createFromPemCore(const std::string& pkey_pem) {
   }
   assert(e.getStatus() == Status::Ok);
 
-  switch (EVP_PKEY_id(evp_pkey.get())) {
+  switch (EVP_PKEY_type(EVP_PKEY_id(evp_pkey.get()))) {
     case EVP_PKEY_RSA:
       key_ptr->rsa_.reset(EVP_PKEY_get1_RSA(evp_pkey.get()));
       key_ptr->kty_ = "RSA";

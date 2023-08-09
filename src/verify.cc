@@ -16,14 +16,13 @@
 
 #include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
+#include "common.h"
 #include "jwt_verify_lib/check_audience.h"
 #include "openssl/bn.h"
-#include "openssl/curve25519.h"
 #include "openssl/ecdsa.h"
 #include "openssl/err.h"
 #include "openssl/evp.h"
 #include "openssl/hmac.h"
-#include "openssl/mem.h"
 #include "openssl/rsa.h"
 #include "openssl/sha.h"
 
@@ -32,12 +31,12 @@ namespace jwt_verify {
 namespace {
 
 // A convenience inline cast function.
-inline const uint8_t* castToUChar(const absl::string_view& str) {
-  return reinterpret_cast<const uint8_t*>(str.data());
+inline const uint8_t *castToUChar(const absl::string_view &str) {
+  return reinterpret_cast<const uint8_t *>(str.data());
 }
 
-bool verifySignatureRSA(RSA* key, const EVP_MD* md, const uint8_t* signature,
-                        size_t signature_len, const uint8_t* signed_data,
+bool verifySignatureRSA(RSA *key, const EVP_MD *md, const uint8_t *signature,
+                        size_t signature_len, const uint8_t *signed_data,
                         size_t signed_data_len) {
   if (key == nullptr || md == nullptr || signature == nullptr ||
       signed_data == nullptr) {
@@ -62,14 +61,14 @@ bool verifySignatureRSA(RSA* key, const EVP_MD* md, const uint8_t* signature,
   return false;
 }
 
-bool verifySignatureRSA(RSA* key, const EVP_MD* md, absl::string_view signature,
+bool verifySignatureRSA(RSA *key, const EVP_MD *md, absl::string_view signature,
                         absl::string_view signed_data) {
   return verifySignatureRSA(key, md, castToUChar(signature), signature.length(),
                             castToUChar(signed_data), signed_data.length());
 }
 
-bool verifySignatureRSAPSS(RSA* key, const EVP_MD* md, const uint8_t* signature,
-                           size_t signature_len, const uint8_t* signed_data,
+bool verifySignatureRSAPSS(RSA *key, const EVP_MD *md, const uint8_t *signature,
+                           size_t signature_len, const uint8_t *signed_data,
                            size_t signed_data_len) {
   if (key == nullptr || md == nullptr || signature == nullptr ||
       signed_data == nullptr) {
@@ -82,7 +81,7 @@ bool verifySignatureRSAPSS(RSA* key, const EVP_MD* md, const uint8_t* signature,
 
   bssl::UniquePtr<EVP_MD_CTX> md_ctx(EVP_MD_CTX_create());
   // pctx is owned by md_ctx, no need to free it separately.
-  EVP_PKEY_CTX* pctx;
+  EVP_PKEY_CTX *pctx;
   if (EVP_DigestVerifyInit(md_ctx.get(), &pctx, md, nullptr, evp_pkey.get()) ==
           1 &&
       EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) == 1 &&
@@ -96,7 +95,7 @@ bool verifySignatureRSAPSS(RSA* key, const EVP_MD* md, const uint8_t* signature,
   return false;
 }
 
-bool verifySignatureRSAPSS(RSA* key, const EVP_MD* md,
+bool verifySignatureRSAPSS(RSA *key, const EVP_MD *md,
                            absl::string_view signature,
                            absl::string_view signed_data) {
   return verifySignatureRSAPSS(key, md, castToUChar(signature),
@@ -104,8 +103,8 @@ bool verifySignatureRSAPSS(RSA* key, const EVP_MD* md,
                                signed_data.length());
 }
 
-bool verifySignatureEC(EC_KEY* key, const EVP_MD* md, const uint8_t* signature,
-                       size_t signature_len, const uint8_t* signed_data,
+bool verifySignatureEC(EC_KEY *key, const EVP_MD *md, const uint8_t *signature,
+                       size_t signature_len, const uint8_t *signed_data,
                        size_t signed_data_len) {
   if (key == nullptr || md == nullptr || signature == nullptr ||
       signed_data == nullptr) {
@@ -132,12 +131,17 @@ bool verifySignatureEC(EC_KEY* key, const EVP_MD* md, const uint8_t* signature,
     return false;
   }
 
-  if (BN_bin2bn(signature, signature_len / 2, ecdsa_sig->r) == nullptr ||
-      BN_bin2bn(signature + (signature_len / 2), signature_len / 2,
-                ecdsa_sig->s) == nullptr) {
+  BIGNUM *pr = BN_new();
+  BIGNUM *ps = BN_new();
+  if (BN_bin2bn(signature, signature_len / 2, pr) == nullptr ||
+      BN_bin2bn(signature + (signature_len / 2), signature_len / 2, ps) ==
+          nullptr) {
+    BN_free(pr);
+    BN_free(ps);
     return false;
   }
 
+  ECDSA_SIG_set0(ecdsa_sig.get(), pr, ps);
   if (ECDSA_do_verify(digest.data(), digest_len, ecdsa_sig.get(), key) == 1) {
     return true;
   }
@@ -153,9 +157,9 @@ bool verifySignatureEC(EC_KEY* key, const EVP_MD* md,
                            castToUChar(signed_data), signed_data.length());
 }
 
-bool verifySignatureOct(const uint8_t* key, size_t key_len, const EVP_MD* md,
-                        const uint8_t* signature, size_t signature_len,
-                        const uint8_t* signed_data, size_t signed_data_len) {
+bool verifySignatureOct(const uint8_t *key, size_t key_len, const EVP_MD *md,
+                        const uint8_t *signature, size_t signature_len,
+                        const uint8_t *signed_data, size_t signed_data_len) {
   if (key == nullptr || md == nullptr || signature == nullptr ||
       signed_data == nullptr) {
     return false;
@@ -181,7 +185,7 @@ bool verifySignatureOct(const uint8_t* key, size_t key_len, const EVP_MD* md,
   return false;
 }
 
-bool verifySignatureOct(absl::string_view key, const EVP_MD* md,
+bool verifySignatureOct(absl::string_view key, const EVP_MD *md,
                         absl::string_view signature,
                         absl::string_view signed_data) {
   return verifySignatureOct(castToUChar(key), key.length(), md,
@@ -196,8 +200,17 @@ Status verifySignatureEd25519(absl::string_view key,
     return Status::JwtEd25519SignatureWrongLength;
   }
 
-  if (ED25519_verify(castToUChar(signed_data), signed_data.length(),
-                     castToUChar(signature), castToUChar(key.data())) == 1) {
+  bssl::UniquePtr<EVP_MD_CTX> ctx(EVP_MD_CTX_new());
+  bssl::UniquePtr<EVP_PKEY> pkey(EVP_PKEY_new_raw_public_key(
+      EVP_PKEY_ED25519, NULL, castToUChar(key), key.length()));
+  int res = EVP_DigestVerifyInit(ctx.get(), NULL, NULL, NULL, pkey.get());
+  if (res == 1) {
+    res =
+        EVP_DigestVerify(ctx.get(), castToUChar(signature), signature.length(),
+                         castToUChar(signed_data), signed_data.length());
+  }
+
+  if (res == 1) {
     return Status::Ok;
   }
 
@@ -205,14 +218,14 @@ Status verifySignatureEd25519(absl::string_view key,
   return Status::JwtVerificationFail;
 }
 
-}  // namespace
+} // namespace
 
-Status verifyJwtWithoutTimeChecking(const Jwt& jwt, const Jwks& jwks) {
+Status verifyJwtWithoutTimeChecking(const Jwt &jwt, const Jwks &jwks) {
   // Verify signature
   std::string signed_data =
       jwt.header_str_base64url_ + '.' + jwt.payload_str_base64url_;
   bool kid_alg_matched = false;
-  for (const auto& jwk : jwks.keys()) {
+  for (const auto &jwk : jwks.keys()) {
     // If kid is specified in JWT, JWK with the same kid is used for
     // verification.
     // If kid is not specified in JWT, try all JWK.
@@ -227,7 +240,7 @@ Status verifyJwtWithoutTimeChecking(const Jwt& jwt, const Jwks& jwks) {
     kid_alg_matched = true;
 
     if (jwk->kty_ == "EC") {
-      const EVP_MD* md;
+      const EVP_MD *md;
       if (jwt.alg_ == "ES384") {
         md = EVP_sha384();
       } else if (jwt.alg_ == "ES512") {
@@ -243,7 +256,7 @@ Status verifyJwtWithoutTimeChecking(const Jwt& jwt, const Jwks& jwks) {
         return Status::Ok;
       }
     } else if (jwk->kty_ == "RSA") {
-      const EVP_MD* md;
+      const EVP_MD *md;
       if (jwt.alg_ == "RS384" || jwt.alg_ == "PS384") {
         md = EVP_sha384();
       } else if (jwt.alg_ == "RS512" || jwt.alg_ == "PS512") {
@@ -267,7 +280,7 @@ Status verifyJwtWithoutTimeChecking(const Jwt& jwt, const Jwks& jwks) {
         }
       }
     } else if (jwk->kty_ == "oct") {
-      const EVP_MD* md;
+      const EVP_MD *md;
       if (jwt.alg_ == "HS384") {
         md = EVP_sha384();
       } else if (jwt.alg_ == "HS512") {
@@ -299,11 +312,11 @@ Status verifyJwtWithoutTimeChecking(const Jwt& jwt, const Jwks& jwks) {
                          : Status::JwksKidAlgMismatch;
 }
 
-Status verifyJwt(const Jwt& jwt, const Jwks& jwks) {
+Status verifyJwt(const Jwt &jwt, const Jwks &jwks) {
   return verifyJwt(jwt, jwks, absl::ToUnixSeconds(absl::Now()));
 }
 
-Status verifyJwt(const Jwt& jwt, const Jwks& jwks, uint64_t now,
+Status verifyJwt(const Jwt &jwt, const Jwks &jwks, uint64_t now,
                  uint64_t clock_skew) {
   Status time_status = jwt.verifyTimeConstraint(now, clock_skew);
   if (time_status != Status::Ok) {
@@ -313,13 +326,13 @@ Status verifyJwt(const Jwt& jwt, const Jwks& jwks, uint64_t now,
   return verifyJwtWithoutTimeChecking(jwt, jwks);
 }
 
-Status verifyJwt(const Jwt& jwt, const Jwks& jwks,
-                 const std::vector<std::string>& audiences) {
+Status verifyJwt(const Jwt &jwt, const Jwks &jwks,
+                 const std::vector<std::string> &audiences) {
   return verifyJwt(jwt, jwks, audiences, absl::ToUnixSeconds(absl::Now()));
 }
 
-Status verifyJwt(const Jwt& jwt, const Jwks& jwks,
-                 const std::vector<std::string>& audiences, uint64_t now) {
+Status verifyJwt(const Jwt &jwt, const Jwks &jwks,
+                 const std::vector<std::string> &audiences, uint64_t now) {
   CheckAudience checker(audiences);
   if (!checker.areAudiencesAllowed(jwt.audiences_)) {
     return Status::JwtAudienceNotAllowed;
@@ -327,5 +340,5 @@ Status verifyJwt(const Jwt& jwt, const Jwks& jwks,
   return verifyJwt(jwt, jwks, now);
 }
 
-}  // namespace jwt_verify
-}  // namespace google
+} // namespace jwt_verify
+} // namespace google

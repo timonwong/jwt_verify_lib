@@ -15,14 +15,14 @@ rules_fuzzing_init()
 
 load(
     "//:repositories.bzl",
-    "boringssl_repositories",
+    "bsslwrapper_repositories",
     "googletest_repositories",
     "abseil_repositories",
     "protobuf_repositories",
     "libprotobuf_mutator_repositories",
 )
 
-boringssl_repositories()
+bsslwrapper_repositories()
 googletest_repositories()
 abseil_repositories()
 protobuf_repositories()
