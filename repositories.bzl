@@ -1,20 +1,17 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-BORINGSSL_COMMIT = "107c03cf6d364939469194396bf7a6b2572d0f9c" # 2020-03-16, same as Envoy
-BORINGSSL_SHA256 = "8ae14b52b7889cf92f3b107610b12afb5011506c77f90c7b3d4a36ed7283905a"
-
-def boringssl_repositories(bind = True):
+def bsslwrapper_repositories(bind = True):
     http_archive(
-        name = "boringssl",
-        strip_prefix = "boringssl-" + BORINGSSL_COMMIT,
-        url = "https://github.com/google/boringssl/archive/" + BORINGSSL_COMMIT + ".tar.gz",
-        sha256 = BORINGSSL_SHA256,
+        name = "bssl_wrapper",
+        strip_prefix = "bssl_wrapper-4f68bbdb2859e7a0bba7692352323df6b0bfb9e5",
+        url = "https://github.com/maistra/bssl_wrapper/archive/4f68bbdb2859e7a0bba7692352323df6b0bfb9e5.tar.gz",
+        sha256 = "a34c91719a67c7a3a030f72b95afd205cc0a6fc56b0b5a29f12b66d5f3b6f515",
     )
 
     if bind:
         native.bind(
-            name = "ssl",
-            actual = "@boringssl//:ssl",
+            name = "bssl_wrapper_lib",
+            actual = "@bssl_wrapper//:bssl_wrapper",
         )
 
 GOOGLETEST_COMMIT = "43863938377a9ea1399c0596269e0890b5c5515a"
